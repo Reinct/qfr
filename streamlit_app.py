@@ -117,8 +117,10 @@ def build_input():
 def get_explainer():
     import shap
 
-    X_ref = np.asarray(data["X_ref"])[:50]
-    return shap.KernelExplainer(model.predict, X_ref)
+    # 背景 = 全队列（302 例），使基线 E[f(X)] 等于队列平均预测，
+    # 与离线 SHAP 图（图 6C）逐个数字自洽。
+    X_bg = np.asarray(data.get("X_bg", data["X_ref"]), dtype=float)
+    return shap.KernelExplainer(model.predict, X_bg)
 
 
 if st.sidebar.button("Predict ISR risk", type="primary", use_container_width=True):
@@ -142,7 +144,8 @@ if st.sidebar.button("Predict ISR risk", type="primary", use_container_width=Tru
     st.subheader("Why this prediction")
     try:
         explainer = get_explainer()
-        sv = explainer.shap_values(x_input.reshape(1, -1), nsamples=200, silent=True)
+        with st.spinner("Computing the SHAP explanation (this can take about 10 seconds)..."):
+            sv = explainer.shap_values(x_input.reshape(1, -1), nsamples=200, silent=True)
         X_disp = x_input.reshape(1, -1).copy()
         for j, sn in enumerate(sel_names):
             if sn in means:
@@ -164,7 +167,9 @@ if st.sidebar.button("Predict ISR risk", type="primary", use_container_width=Tru
         plt.close(fig)
         st.caption(
             "Values are contributions to the model risk score, not to an absolute "
-            "probability. Reference distribution: 50 randomly drawn cohort patients."
+            "probability. Reference distribution: the whole development cohort "
+            "(302 patients); the dashed baseline is E[f(X)] = 59.48, the mean "
+            "predicted risk score in that cohort."
         )
     except Exception as e:  # pragma: no cover
         st.warning(f"SHAP explanation unavailable: {e}")
